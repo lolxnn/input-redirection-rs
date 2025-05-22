@@ -12,6 +12,7 @@ pub struct App {
     cfg: AppConfig,
     gilrs: Gilrs,
     active_id: Option<GamepadId>,
+    gamepad_name: String,
     state: PadState,
     sender: Sender,
 }
@@ -19,17 +20,25 @@ pub struct App {
 impl App {
     pub fn new(_cc: &CreationContext) -> Self {
         let cfg = AppConfig::load().unwrap_or_default();
-        let gilrs = Gilrs::new().expect("gilrs init failed");
+        let gilrs = Gilrs::new().unwrap();
+
+        let maybe_gamepad = gilrs.gamepads().next();
+        let (active_id, gamepad_name) = if let Some((id, gamepad)) = maybe_gamepad {
+            (Some(id), gamepad.name().to_string())
+        } else {
+            (None, "Waiting for controller...".to_string())
+        };
 
         Self {
             sender: Sender::new(cfg.target_ip.clone()),
             state: PadState::new(),
-            active_id: gilrs.gamepads().next().map(|(id, _)| id),
+            active_id,
+            gamepad_name,
             gilrs,
             cfg,
         }
     }
-    
+
     fn axis_inverted(&self, axis: Axis) -> bool {
         match axis {
             Axis::LeftStickX => self.cfg.invert_lx,
@@ -68,6 +77,7 @@ impl App {
             EventType::Connected => {
                 if self.active_id.is_none() {
                     self.active_id = Some(ev.id);
+                    self.gamepad_name = self.gilrs.gamepad(ev.id).name().to_string();
                 }
             }
             EventType::Disconnected => {
@@ -128,6 +138,22 @@ impl App {
 
 impl EguiApp for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.active_id.is_none() {
+            if let Some((id, gamepad)) = self.gilrs.gamepads().next() {
+                self.active_id = Some(id);
+                self.gamepad_name = gamepad.name().to_string();
+                eprintln!("Gamepad connected: {}", self.gamepad_name);
+            }
+        }
+
+        if let Some(active) = self.active_id {
+            if !self.gilrs.gamepads().any(|(id, _)| id == active) {
+                eprintln!("Gamepad disconnected");
+                self.active_id = None;
+                self.gamepad_name = "Waiting for controller...".to_string();
+            }
+        }
+
         while let Some(ev) = self.gilrs.next_event() {
             if Some(ev.id) == self.active_id {
                 self.handle_gilrs_event(ev);
@@ -136,12 +162,12 @@ impl EguiApp for App {
 
         /* ---------- UI ---------- */
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Rust 3DS Input Redirection");
+            ui.heading("3DS Input-Redirection");
             ui.separator();
 
             // IP
             ui.horizontal(|ui| {
-                ui.label("Target 3DS IP:");
+                ui.label("3DS IP Address:");
                 if ui
                     .add(egui::TextEdit::singleline(&mut self.cfg.target_ip).desired_width(120.0))
                     .changed()
@@ -158,7 +184,7 @@ impl EguiApp for App {
             if ui
                 .add(
                     egui::Slider::new(&mut l_perc, 5.0..=50.0)
-                        .text("Left Stick Dead-zone")
+                        .text("Left-Stick Dead-zone")
                         .suffix("%")
                         .min_decimals(1)
                         .max_decimals(1),
@@ -173,7 +199,7 @@ impl EguiApp for App {
             if ui
                 .add(
                     egui::Slider::new(&mut r_perc, 5.0..=50.0)
-                        .text("Right Stick Dead-zone")
+                        .text("Right-Stick Dead-zone")
                         .suffix("%")
                         .min_decimals(1)
                         .max_decimals(1),
@@ -187,27 +213,27 @@ impl EguiApp for App {
             ui.separator();
 
             if ui
-                .checkbox(&mut self.cfg.invert_lx, "Invert LS X")
+                .checkbox(&mut self.cfg.invert_lx, "Invert Left-Stick X Axis")
                 .changed()
                 || ui
-                    .checkbox(&mut self.cfg.invert_ly, "Invert LS Y")
+                    .checkbox(&mut self.cfg.invert_ly, "Invert Left-Stick Y Axis")
                     .changed()
                 || ui
-                    .checkbox(&mut self.cfg.invert_rx, "Invert RS X")
+                    .checkbox(&mut self.cfg.invert_rx, "Invert Right-Stick X Axis")
                     .changed()
                 || ui
-                    .checkbox(&mut self.cfg.invert_ry, "Invert RS Y")
+                    .checkbox(&mut self.cfg.invert_ry, "Invert Right-Stick Y Axis")
                     .changed()
             {
                 let _ = self.cfg.save();
             }
 
             ui.separator();
-            ui.label(
-                self.active_id
-                    .map(|id| format!("Gamepad Active: {id:?}"))
-                    .unwrap_or_else(|| "No active gamepad".into()),
-            );
+            ui.label(if let Some(_) = self.active_id {
+                format!("Gamepad Active: {}", self.gamepad_name)
+            } else {
+                "No active gamepad".into()
+            });
             ui.label(format!(
                 "LX: {:.3}, LY: {:.3} (DZ {:.0} %)",
                 self.state.lx,

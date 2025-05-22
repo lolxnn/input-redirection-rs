@@ -7,13 +7,23 @@ edition = "2024"
 byteorder = "1.5.0"
 directories = "6.0.0"
 eframe = "0.31.1"
-gilrs = "0.11.0"
-serde = {version = "1.0.219", features = ["derive"]}
+gilrs = { version = "0.11", default-features = false }
+serde = { version = "1.0.219", features = ["derive"] }
 toml = "0.8.22"
 
+[target.'cfg(windows)'.dependencies]
+gilrs = { version = "0.11", default-features = false, features = ["xinput"] }
+
+[target.'cfg(unix)'.dependencies]
+gilrs = { version = "0.11" }
+
 [profile.release]
-strip = "symbols"  # Or "debuginfo" or "all"
+strip = "symbols"
 lto = true
 codegen-units = 1
 panic = "abort"
 debug-assertions = false
+
+[build-dependencies]
+winresource = "0.1.20"
+image = "0.25.6"

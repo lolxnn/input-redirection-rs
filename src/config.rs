@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub deadzone_rstick: f32,
 }
 
+// Default values for the config
 impl Default for AppConfig {
     fn default() -> Self {
         Self {

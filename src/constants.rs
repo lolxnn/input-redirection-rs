@@ -4,12 +4,14 @@ pub const TARGET_PORT: u16 = 4950;
 // Stick bounds & offsets
 pub const CPAD_BOUND: f32 = 0x5D0 as f32;
 pub const CPP_BOUND: f32 = 0x7F as f32;
+pub const ROT_CPP_BOUND: f32 = std::f32::consts::FRAC_1_SQRT_2 * CPP_BOUND;
 pub const CPAD_CENTER_OFFSET_INT: i32 = 0x800;
 pub const CPP_CENTER_OFFSET_INT: i32 = 0x80;
 
 // Tiny “nudge” values
 pub const MINIMAL_NUDGE_LSTICK: f32 = 0.001;
 pub const MINIMAL_NUDGE_RSTICK: f32 = 0.008;
+
 
 // HID button bits
 pub mod hid_bits {
