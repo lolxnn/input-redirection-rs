@@ -10,32 +10,38 @@ use crate::{
 
 pub struct App {
     cfg: AppConfig,
+    ip_buffer: String,
     gilrs: Gilrs,
     active_id: Option<GamepadId>,
     gamepad_name: String,
     state: PadState,
     sender: Sender,
+    needs_repaint: bool,
 }
 
 impl App {
     pub fn new(_cc: &CreationContext) -> Self {
         let cfg = AppConfig::load().unwrap_or_default();
+        let ip_buffer = cfg.target_ip.clone();
         let gilrs = Gilrs::new().unwrap();
 
-        let maybe_gamepad = gilrs.gamepads().next();
-        let (active_id, gamepad_name) = if let Some((id, gamepad)) = maybe_gamepad {
+        let (active_id, gamepad_name) = if let Some((id, gamepad)) = gilrs.gamepads().next() {
             (Some(id), gamepad.name().to_string())
         } else {
             (None, "Waiting for controller...".to_string())
         };
 
+        let sender = Sender::new(cfg.target_ip.clone());
+
         Self {
-            sender: Sender::new(cfg.target_ip.clone()),
-            state: PadState::new(),
+            cfg,
+            ip_buffer,
+            gilrs,
             active_id,
             gamepad_name,
-            gilrs,
-            cfg,
+            state: PadState::new(),
+            sender,
+            needs_repaint: false,
         }
     }
 
@@ -48,6 +54,7 @@ impl App {
             _ => false,
         }
     }
+
     fn deadzone(&self, axis: Axis) -> f32 {
         match axis {
             Axis::LeftStickX | Axis::LeftStickY => self.cfg.deadzone_lstick,
@@ -57,6 +64,7 @@ impl App {
     }
 
     fn handle_gilrs_event(&mut self, ev: gilrs::Event) {
+        let mut state_changed = false;
         match ev.event {
             EventType::AxisChanged(axis, value, ..) => {
                 if self
@@ -64,28 +72,36 @@ impl App {
                     .apply_axis(axis, value, self.axis_inverted(axis), self.deadzone(axis))
                 {
                     self.sender.maybe_send(&self.state);
+                    state_changed = true;
                 }
             }
             EventType::ButtonPressed(btn, ..) => {
                 self.update_button_state(btn, true);
                 self.sender.maybe_send(&self.state);
+                state_changed = true;
             }
             EventType::ButtonReleased(btn, ..) => {
                 self.update_button_state(btn, false);
                 self.sender.maybe_send(&self.state);
+                state_changed = true;
             }
             EventType::Connected => {
                 if self.active_id.is_none() {
                     self.active_id = Some(ev.id);
                     self.gamepad_name = self.gilrs.gamepad(ev.id).name().to_string();
+                    state_changed = true;
                 }
             }
             EventType::Disconnected => {
                 if self.active_id == Some(ev.id) {
                     self.active_id = self.gilrs.gamepads().next().map(|(id, _)| id);
+                    state_changed = true;
                 }
             }
             _ => {}
+        }
+        if state_changed {
+            self.needs_repaint = true;
         }
     }
 
@@ -138,40 +154,42 @@ impl App {
 
 impl EguiApp for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // detect new/disconnected gamepads
         if self.active_id.is_none() {
             if let Some((id, gamepad)) = self.gilrs.gamepads().next() {
                 self.active_id = Some(id);
                 self.gamepad_name = gamepad.name().to_string();
-                eprintln!("Gamepad connected: {}", self.gamepad_name);
+                self.needs_repaint = true;
             }
-        }
-
-        if let Some(active) = self.active_id {
+        } else if let Some(active) = self.active_id {
             if !self.gilrs.gamepads().any(|(id, _)| id == active) {
                 eprintln!("Gamepad disconnected");
                 self.active_id = None;
-                self.gamepad_name = "Waiting for controller...".to_string();
+                self.gamepad_name = "Waiting for controller...".into();
+                self.needs_repaint = true;
             }
         }
 
+        // process all pending events
         while let Some(ev) = self.gilrs.next_event() {
             if Some(ev.id) == self.active_id {
                 self.handle_gilrs_event(ev);
             }
         }
 
-        /* ---------- UI ---------- */
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("3DS Input-Redirection");
             ui.separator();
 
-            // IP
+            // IP Address editor with commit on Enter or focus lost
             ui.horizontal(|ui| {
                 ui.label("3DS IP Address:");
-                if ui
-                    .add(egui::TextEdit::singleline(&mut self.cfg.target_ip).desired_width(120.0))
-                    .changed()
+                let resp =
+                    ui.add(egui::TextEdit::singleline(&mut self.ip_buffer).desired_width(120.0));
+                if (resp.lost_focus() && resp.changed())
+                    || ui.input(|i| i.key_pressed(egui::Key::Enter))
                 {
+                    self.cfg.target_ip = self.ip_buffer.clone();
                     let _ = self.cfg.save();
                     self.sender.set_target(self.cfg.target_ip.clone());
                 }
@@ -212,6 +230,7 @@ impl EguiApp for App {
 
             ui.separator();
 
+            // Inversion checkboxes
             if ui
                 .checkbox(&mut self.cfg.invert_lx, "Invert Left-Stick X Axis")
                 .changed()
@@ -235,13 +254,13 @@ impl EguiApp for App {
                 "No active gamepad".into()
             });
             ui.label(format!(
-                "LX: {:.3}, LY: {:.3} (DZ {:.0} %)",
+                "LX: {:.3}, LY: {:.3} (DZ {:.0}%)",
                 self.state.lx,
                 self.state.ly,
                 self.cfg.deadzone_lstick * 100.0
             ));
             ui.label(format!(
-                "RX: {:.3}, RY: {:.3} (DZ {:.0} %)",
+                "RX: {:.3}, RY: {:.3} (DZ {:.0}%)",
                 self.state.rx,
                 self.state.ry,
                 self.cfg.deadzone_rstick * 100.0
@@ -250,9 +269,10 @@ impl EguiApp for App {
             ui.label(format!("IR Buttons (ZL/ZR): {:02X}", self.state.ir_buttons));
         });
 
-        ctx.request_repaint_after(std::time::Duration::from_millis(16));
-
-        // idle refresh
-        self.sender.maybe_send(&self.state);
+        // reactive repaint only when needed
+        if self.needs_repaint {
+            self.needs_repaint = false;
+            ctx.request_repaint();
+        }
     }
 }

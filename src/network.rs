@@ -11,7 +11,8 @@ pub struct Sender {
 impl Sender {
     pub fn new(target_ip: String) -> Self {
         Self {
-            sock: UdpSocket::bind("0.0.0.0:0").expect("UDP bind failed"),
+            // Bind local address to avoid "address already in use" error
+            sock: UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP socket"),
             target_ip,
             last_sent: Instant::now(),
         }
