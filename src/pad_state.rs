@@ -1,7 +1,8 @@
+// pad_state.rs
 use crate::constants::*;
 use gilrs::Axis;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PadState {
     pub lx: f32,
     pub ly: f32,

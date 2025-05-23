@@ -12,7 +12,6 @@ pub const CPP_CENTER_OFFSET_INT: i32 = 0x80;
 pub const MINIMAL_NUDGE_LSTICK: f32 = 0.001;
 pub const MINIMAL_NUDGE_RSTICK: f32 = 0.008;
 
-
 // HID button bits
 pub mod hid_bits {
     pub const A: u32 = 0;

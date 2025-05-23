@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.98"
 byteorder = "1.5.0"
+ctrlc = "3.4.7"
 directories = "6.0.0"
 eframe = "0.31.1"
 gilrs = { version = "0.11", default-features = false }
