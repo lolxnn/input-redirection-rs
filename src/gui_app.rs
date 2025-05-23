@@ -159,7 +159,7 @@ impl App for GuiApp {
         let is_poller_active = self.poller_worker_handle.is_some();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Gamepad Input-Redirection Configuration");
+            ui.heading("3DS Input-Redirection Configuration");
             ui.add_space(10.0);
 
             // --- Configuration Group ---

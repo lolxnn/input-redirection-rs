@@ -136,8 +136,6 @@ impl PollerWorker {
     /// Runs the main event polling and state sending loop.
     /// This method is intended to be run in a separate thread.
     pub fn run(&mut self) {
-        println!("PollerWorker thread started. Polling for gamepad events...");
-
         while self.running.load(Ordering::SeqCst) {
             let mut event_processed_and_state_changed = false;
 
@@ -145,7 +143,7 @@ impl PollerWorker {
             // This allows the loop to periodically check the `running` flag.
             if let Some(evt) = self
                 .gilrs
-                .next_event_blocking(Some(Duration::from_millis(5)))
+                .next_event_blocking(Some(Duration::from_millis(16)))
             {
                 if evt.id == self.active_id {
                     match evt.event {
@@ -165,7 +163,7 @@ impl PollerWorker {
                             event_processed_and_state_changed = true;
                         }
                         EventType::Connected | EventType::Disconnected => {
-                            println!("PollerWorker: Gamepad {:?} event: {:?}", evt.id, evt.event);
+                            println!("Input-Redirection: Gamepad {:?} event: {:?}", evt.id, evt.event);
                         }
                         _ => {} // Other event types are ignored
                     }
@@ -178,6 +176,5 @@ impl PollerWorker {
             // Unconditionally send state to ensure regular updates, as per original logic.
             self.sender.send_state(&self.state);
         }
-        println!("PollerWorker thread finished.");
     }
 }

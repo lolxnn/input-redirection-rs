@@ -78,24 +78,23 @@ impl CliApp {
         let r = self.running_signal.clone();
         ctrlc::set_handler(move || {
             if r.load(Ordering::SeqCst) {
-                println!("\nCtrl+C pressed. Signaling PollerWorker to stop...");
                 r.store(false, Ordering::SeqCst);
             } else {
-                println!("\nCtrl+C pressed again. PollerWorker is already stopping.");
+                println!("\nCtrl+C pressed again. Input-Redirection is already stopping.");
             }
         })?;
 
-        println!("CLI app running. PollerWorker is active in a separate thread.");
+        println!("CLI app running. Input-Redirection is active in a separate thread.");
         println!("Press Ctrl+C to stop.");
 
         // Wait for the PollerWorker thread to complete its execution.
         if let Some(handle) = self.worker_handle.take() {
             match handle.join() {
-                Ok(_) => println!("PollerWorker thread joined successfully."),
-                Err(e) => eprintln!("PollerWorker thread panicked: {:?}", e),
+                Ok(_) => println!("Input-Redirection thread joined successfully."),
+                Err(e) => eprintln!("Input-Redirection thread panicked: {:?}", e),
             }
         } else {
-            eprintln!("Error: PollerWorker thread handle was already taken or not initialized.");
+            eprintln!("Error: Input-Redirection thread handle was already taken or not initialized.");
         }
 
         println!("\nStopped CLI app.");
