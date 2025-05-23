@@ -1,11 +1,12 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-mod app;
 mod config;
 mod constants;
+mod gui_app;
 mod network;
 mod pad_state;
 use eframe::{NativeOptions, egui};
+use gui_app::GuiApp;
 
 fn main() -> eframe::Result<()> {
     const ICON_DATA: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/app_icon.rgba"));
@@ -31,6 +32,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "3DS Input Redirection",
         options,
-        Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
+        Box::new(|cc| Ok(Box::new(GuiApp::new(cc)))),
     )
 }

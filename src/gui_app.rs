@@ -8,7 +8,7 @@ use crate::{
     pad_state::PadState,
 };
 
-pub struct App {
+pub struct GuiApp {
     cfg: AppConfig,
     ip_buffer: String,
     gilrs: Gilrs,
@@ -16,10 +16,9 @@ pub struct App {
     gamepad_name: String,
     state: PadState,
     sender: Sender,
-    needs_repaint: bool,
 }
 
-impl App {
+impl GuiApp {
     pub fn new(_cc: &CreationContext) -> Self {
         let cfg = AppConfig::load().unwrap_or_default();
         let ip_buffer = cfg.target_ip.clone();
@@ -41,7 +40,6 @@ impl App {
             gamepad_name,
             state: PadState::new(),
             sender,
-            needs_repaint: false,
         }
     }
 
@@ -64,7 +62,6 @@ impl App {
     }
 
     fn handle_gilrs_event(&mut self, ev: gilrs::Event) {
-        let mut state_changed = false;
         match ev.event {
             EventType::AxisChanged(axis, value, ..) => {
                 if self
@@ -72,36 +69,28 @@ impl App {
                     .apply_axis(axis, value, self.axis_inverted(axis), self.deadzone(axis))
                 {
                     self.sender.maybe_send(&self.state);
-                    state_changed = true;
                 }
             }
             EventType::ButtonPressed(btn, ..) => {
                 self.update_button_state(btn, true);
                 self.sender.maybe_send(&self.state);
-                state_changed = true;
             }
             EventType::ButtonReleased(btn, ..) => {
                 self.update_button_state(btn, false);
                 self.sender.maybe_send(&self.state);
-                state_changed = true;
             }
             EventType::Connected => {
                 if self.active_id.is_none() {
                     self.active_id = Some(ev.id);
                     self.gamepad_name = self.gilrs.gamepad(ev.id).name().to_string();
-                    state_changed = true;
                 }
             }
             EventType::Disconnected => {
                 if self.active_id == Some(ev.id) {
                     self.active_id = self.gilrs.gamepads().next().map(|(id, _)| id);
-                    state_changed = true;
                 }
             }
             _ => {}
-        }
-        if state_changed {
-            self.needs_repaint = true;
         }
     }
 
@@ -152,21 +141,19 @@ impl App {
     }
 }
 
-impl EguiApp for App {
+impl EguiApp for GuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // detect new/disconnected gamepads
         if self.active_id.is_none() {
             if let Some((id, gamepad)) = self.gilrs.gamepads().next() {
                 self.active_id = Some(id);
                 self.gamepad_name = gamepad.name().to_string();
-                self.needs_repaint = true;
             }
         } else if let Some(active) = self.active_id {
             if !self.gilrs.gamepads().any(|(id, _)| id == active) {
                 eprintln!("Gamepad disconnected");
                 self.active_id = None;
                 self.gamepad_name = "Waiting for controller...".into();
-                self.needs_repaint = true;
             }
         }
 
@@ -269,10 +256,7 @@ impl EguiApp for App {
             ui.label(format!("IR Buttons (ZL/ZR): {:02X}", self.state.ir_buttons));
         });
 
-        // reactive repaint only when needed
-        if self.needs_repaint {
-            self.needs_repaint = false;
-            ctx.request_repaint();
-        }
+        ctx.request_repaint_after(std::time::Duration::from_millis(16));
+        self.sender.maybe_send(&self.state);
     }
 }
